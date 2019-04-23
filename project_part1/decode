@@ -1,0 +1,14 @@
+#!/usr/bin/python
+# Usage: ./decode ciphertext has_breakpoint
+# Example: ./decode `cat test_ciphertext.txt` false
+#
+# Reads ciphertext as first command line argument, prints plaintext to stdout
+import sys
+from decode import decode
+
+def main():
+    has_breakpoint = sys.argv[2].lower() == 'true'
+    print decode(sys.argv[1], has_breakpoint)
+
+if __name__ == '__main__':
+    main()
