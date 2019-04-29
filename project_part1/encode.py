@@ -11,14 +11,21 @@ import sys
 import string
 from random import shuffle, randint, seed
 from test import first_line
+import csv
 
 
-def encode(input_filename, output_filename):
+def encode(input_filename, output_filename, cipher_fn_filename=None):
     alphabet = list(string.ascii_lowercase) + [' ', '.']
-    letter2ix = dict(map(reversed, enumerate(alphabet)))
+    if cipher_fn_filename is None:
+        letter2ix = dict(map(reversed, enumerate(alphabet)))
 
-    cipherbet = list(alphabet) # Make a new copy of alphabet
-    shuffle(cipherbet)
+        cipherbet = list(alphabet) # Make a new copy of alphabet
+        shuffle(cipherbet)
+    else:
+        letter2ix = dict(map(reversed, enumerate(alphabet)))
+        with open(cipher_fn_filename, 'rb') as f:
+            reader = csv.reader(f)
+            cipherbet = list(reader)[0]
 
     plaintext = first_line(input_filename)
     ciphertext = ''.join(cipherbet[letter2ix[ltr]] for ltr in plaintext)
@@ -50,14 +57,20 @@ def encode_with_breakpoint(input_filename, output_filename):
 
 
 def main():
-    if len(sys.argv) > 4:
-        seed(sys.argv[4])
+    if len(sys.argv) > 5:
+        seed(sys.argv[5])
 
     has_breakpoint = sys.argv[3].lower() == 'true'
     if has_breakpoint:
         encode_with_breakpoint(sys.argv[1], sys.argv[2])
     else:
-        encode(sys.argv[1], sys.argv[2])
+        encode(sys.argv[1], sys.argv[2], cipher_fn_filename=sys.argv[4])
 
 if __name__ == '__main__':
     main()
+
+
+'''
+python encode.py data/plaintext_short.txt data/ciphertext_short.txt false data/cipher_function.csv
+
+'''
