@@ -3,6 +3,7 @@ import numpy as np
 from copy import deepcopy
 import matplotlib.pyplot as plt
 from encode import encode
+import operator
 
 def decode(ciphertext, has_breakpoint, true_plaintext=None):
     n_to_stop = None
@@ -42,9 +43,11 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
     # f_inv[n]:    letter y: index in x -- {'a':6, 'b':27, ...}
     f_inv = [{} for n in range(N+1)] 
     f = [{} for n in range(N+1)]
-    for i, letter in enumerate(alphabet):
-        f_inv[0][letter] = i
+    # for i, letter in enumerate(alphabet):
+    #     f_inv[0][letter] = i
     
+    f_inv[0] = initialize_f_inv(ciphertext, alphabet, P)
+
     # # only set space and . to be the correct mapping
     # letters_to_get_correct = ["."," "]
     # for letter_to_get_correct in letters_to_get_correct:
@@ -197,22 +200,39 @@ def compute_likelihood2(P, M, f_inv_new, f_inv, ciphertext, alphabet):
         # print(ciphertext[k], num, den, ratio, pyf)
     return log_pyf, log_new, log_old
 
-def compute_likelihood3(P, M, previous, proposed):
-    with open('data/alphabet.csv', 'rb') as f:
-        reader = csv.reader(f)
-        alphabet = list(reader)[0]
+# def compute_likelihood3(P, M, previous, proposed):
+#     with open('data/alphabet.csv', 'rb') as f:
+#         reader = csv.reader(f)
+#         alphabet = list(reader)[0]
 
-    pyf = np.log(P[alphabet.index(previous[0])] / P[alphabet.index(proposed[0])])
-    for k in range(1, len(previous)):
-        if previous[k] == proposed[k]:
-            continue
-        num = np.log(M[alphabet.index(previous[k]), alphabet.index(previous[k-1])])
-        den = np.log(M[alphabet.index(proposed[k]), alphabet.index(proposed[k-1])])
-        ratio = num - den
-        pyf += ratio
-        print(num, den, ratio, pyf)
-    print(pyf)
-    pyf = np.exp(pyf)
+#     pyf = np.log(P[alphabet.index(previous[0])] / P[alphabet.index(proposed[0])])
+#     for k in range(1, len(previous)):
+#         if previous[k] == proposed[k]:
+#             continue
+#         num = np.log(M[alphabet.index(previous[k]), alphabet.index(previous[k-1])])
+#         den = np.log(M[alphabet.index(proposed[k]), alphabet.index(proposed[k-1])])
+#         ratio = num - den
+#         pyf += ratio
+#         print(num, den, ratio, pyf)
+#     print(pyf)
+#     pyf = np.exp(pyf)
+
+def initialize_f_inv(ciphertext, alphabet, P):
+    p = {}
+    letter_counts = {}
+    f_inv = {}
+    for i, letter in enumerate(alphabet):
+        letter_counts[letter] = 0
+        p[letter] = P[i]
+    for letter in ciphertext:
+        letter_counts[letter] += 1
+    sorted_letters = sorted(letter_counts.items(), key=operator.itemgetter(1))
+    p_sorted_letters = sorted(p.items(), key=operator.itemgetter(1))
+    letters = [l[0] for l in sorted_letters]
+    p_letters = [l[0] for l in p_sorted_letters]
+    for i in range(len(p_letters)):
+        f_inv[letters[i]] = alphabet.index(p_letters[i])
+    return f_inv
 
 
 def finv_to_f(f_inv):
