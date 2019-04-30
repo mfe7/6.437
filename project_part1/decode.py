@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from encode import encode
 import operator
 
+CROP_LENGTH = 500
+
 def decode(ciphertext, has_breakpoint, true_plaintext=None):
     n_to_stop = None
     print("********")
@@ -12,7 +14,7 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
     print("********")
 
     np.random.seed(seed=124)
-    N = int(1e5) # num_iterations
+    N = int(1500) # num_iterations
     with open('data/alphabet.csv', 'rb') as f:
         reader = csv.reader(f)
         alphabet = list(reader)[0]
@@ -22,11 +24,13 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
 
     if true_plaintext is None:
         # with open('test_plaintext.txt', 'r') as file:
-        # with open('data/plaintext.txt', 'r') as file:
+        with open('data/plaintext.txt', 'r') as file:
+        # with open('data/plaintext_meghan.txt', 'r') as file:
         # with open('data/plaintext_short.txt', 'r') as file:
         # with open('data/plaintext_warandpeace.txt', 'r') as file:
         # with open('data/plaintext_feynman.txt', 'r') as file:
-        with open('data/plaintext_paradiselost.txt', 'r') as file:
+        # with open('data/plaintext_paradiselost.txt', 'r') as file:
+            # true_plaintext = file.read().rstrip('\n')[:CROP_LENGTH] # remove trailing \n
             true_plaintext = file.read().rstrip('\n') # remove trailing \n
 
     a = np.empty((N+1))
@@ -47,14 +51,13 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
 
     f_inv[0] = initialize_f_inv(ciphertext, alphabet, P)
 
+    period_ind, space_ind = find_space_and_period(ciphertext, alphabet)
+    f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
+
     # with open('data/cipher_function.csv', 'rb') as f:
     #     reader = csv.reader(f)
     #     cipher_function = list(reader)[0]
     # print(cipher_function)
-
-    period_ind, space_ind = find_space_and_period(ciphertext, alphabet)
-    f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
-
     # for i, letter in enumerate(cipher_function):
     #     # REMOVE LATER -- JUST TO TEST WITH THE RIGHT F
     #     f_inv[0][letter] = i
@@ -81,14 +84,9 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
         f_inv[n][i] = f_inv[n-1][j]
         f_inv[n][j] = f_inv[n-1][i]
 
-        # print("previous decoding: {}".format(decode_ciphertext(ciphertext, f_inv[n-1], alphabet)))
-        # print('-----')
-        # print("proposed decoding: {}".format(decode_ciphertext(ciphertext, f_inv[n], alphabet)))
-        # assert(0)
-
         # compute log_likelihoods of the ciphertext under the new and old mappings
-        log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood2(P, M, f_inv[n], f_inv[n-1], ciphertext, alphabet)
-        pyf[n] = np.exp(log_pyf[n])
+        log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood(P, M, f_inv[n], f_inv[n-1], ciphertext, alphabet)
+        pyf[n] = np.power(2, log_pyf[n])
         a[n] = np.min([1., pyf[n]])
 
         # print("log_l_new[n]: {}".format(log_l_new[n]))
@@ -97,22 +95,7 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
         # print("pyf[n]: {}".format(pyf[n]))
         # print("a[n]: {}".format(a[n]))
 
-        # print("ciphertext[0]: {}".format(ciphertext[0]))
-        # print("f_inv[n-1][ciphertext[0]]: {}".format(f_inv[n-1][ciphertext[0]]))
-        # print("P[f_inv[n-1][ciphertext[0]]]: {}".format(P[f_inv[n-1][ciphertext[0]]]))
-
         # sample from bernoulli whether to accept or reject new mapping
-        # if np.array_equal(np.isinf([log_l_new[n], log_l_old[n]]), [True, False]):
-        #     accept[n] = False
-        #     if np.random.choice([True, False], p=[a[n], 1-a[n]]) == True:
-        #         assert(0)
-        #     #     print(log_pyf[n])
-        #     #     print(np.exp(log_pyf[n]))
-        #     #     print(np.min([1., np.exp(log_pyf[n])]))
-        #     #     print(a[n])
-        #     #     assert(0)
-        # else:
-        #     accept[n] = np.random.choice([True, False], p=[a[n], 1-a[n]])
         accept[n] = np.random.choice([True, False], p=[a[n], 1-a[n]])
         # print("accept[n]: {}".format(accept[n]))
 
@@ -134,7 +117,7 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
             print("log_l_new[n]: {}".format(log_l_new[n]))
             print("log_l_old[n]: {}".format(log_l_old[n]))
             print("log_pyf[n]: {}".format(log_pyf[n]))
-            print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:200])
+            print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:500])
             print("-----")
         # if n == 40:
         #     break
@@ -143,21 +126,15 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
     plaintext = decode_ciphertext(ciphertext, f_inv[n], alphabet)
     # f[n] = finv_to_f(f_inv[n])
 
-    # plot_likelihood(likelihood)
-    plot_acceptance_rate(accept[:n+1], T=10)
-    plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
+    plot_log_likelihood(log_likelihood[:n+1])
+    plot_acceptance_rate(accept[:n+1], T=20)
+    accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
     plot_log_likelihood_per_symbol(log_likelihood[:n+1], len(ciphertext))
-    plt.show()
+    # plt.show()
 
     print(plaintext)
-    return plaintext
-
-# def compute_likelihood(P, M, f_inv, ciphertext):
-#     # print("P[f_inv[ciphertext[0]]]: {}".format(P[f_inv[ciphertext[0]]]))
-#     # for k in range(1, len(ciphertext)):
-#     #     print("M[f_inv[ciphertext[k]], f_inv[ciphertext[k-1]]]: {}".format(M[f_inv[ciphertext[k]], f_inv[ciphertext[k-1]]]))
-#     l = P[f_inv[ciphertext[0]]]*np.product([np.log(M[f_inv[ciphertext[k]], f_inv[ciphertext[k-1]]]) for k in range(1, len(ciphertext))])
-#     return l
+    return plaintext, accuracy
+    # return plaintext
 
 def set_letters_correctly(letters_to_get_correct, letter_inds, alphabet, f_inv):
     # only set space and . to be the correct mapping
@@ -165,15 +142,15 @@ def set_letters_correctly(letters_to_get_correct, letter_inds, alphabet, f_inv):
         letter_to_get_correct = letters_to_get_correct[k]
         letter_alphabet_ind = alphabet.index(letter_to_get_correct) # where is the letter in the normal alphabet
         letter_inv = alphabet[letter_inds[k]] # letter the letter should be encoded as
-        print("the letter: '{}' should be encoded as '{}'".format(letter_to_get_correct, letter_inv))
-        print("but currently we decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[letter_inv]]))
+        # print("the letter: '{}' should be encoded as '{}'".format(letter_to_get_correct, letter_inv))
+        # print("but currently we decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[letter_inv]]))
         for i, letter in enumerate(f_inv.keys()):
             if f_inv[letter] == letter_alphabet_ind:
                 period_letter = letter
         f_inv[period_letter] = f_inv[letter_inv]
         f_inv[letter_inv] = letter_alphabet_ind
-        print("After fixing.....")
-        print("and we now decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[letter_inv]]))
+        # print("After fixing.....")
+        # print("and we now decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[letter_inv]]))
     return f_inv
 
 # def set_letters_correctly(letters_to_get_correct, alphabet, cipher_function, f_inv):
@@ -193,16 +170,16 @@ def set_letters_correctly(letters_to_get_correct, letter_inds, alphabet, f_inv):
 #         # print('-----')
 #     return f_inv
 
-def compute_likelihood2(P, M, f_inv_new, f_inv, ciphertext, alphabet):
+def compute_likelihood(P, M, f_inv_new, f_inv, ciphertext, alphabet):
     # with open('data/plaintext_short.txt', 'r') as file:
     #     true_plaintext = file.read().rstrip('\n') # remove trailing \n
-    log_pyf = np.log(P[f_inv_new[ciphertext[0]]] / P[f_inv[ciphertext[0]]])
+    log_pyf = np.log2(P[f_inv_new[ciphertext[0]]] / P[f_inv[ciphertext[0]]])
     log_new = 0
     log_old = 0
     # print("first letter prob: {}".format(pyf))
     for k in range(1, len(ciphertext)):
-        num = np.log(M[f_inv_new[ciphertext[k]], f_inv_new[ciphertext[k-1]]])
-        den = np.log(M[f_inv[ciphertext[k]], f_inv[ciphertext[k-1]]])
+        num = np.log2(M[f_inv_new[ciphertext[k]], f_inv_new[ciphertext[k-1]]])
+        den = np.log2(M[f_inv[ciphertext[k]], f_inv[ciphertext[k-1]]])
         if np.isinf(num) and np.isinf(den):
             num = den = -50
         log_new += num
@@ -218,23 +195,6 @@ def compute_likelihood2(P, M, f_inv_new, f_inv, ciphertext, alphabet):
         # print(true_plaintext[k], ciphertext[k], alphabet[f_inv[ciphertext[k]]], alphabet[f_inv[ciphertext[k-1]]], num, den, ratio, log_pyf)
         # print(ciphertext[k], num, den, ratio, pyf)
     return log_pyf, log_new, log_old
-
-# def compute_likelihood3(P, M, previous, proposed):
-#     with open('data/alphabet.csv', 'rb') as f:
-#         reader = csv.reader(f)
-#         alphabet = list(reader)[0]
-
-#     pyf = np.log(P[alphabet.index(previous[0])] / P[alphabet.index(proposed[0])])
-#     for k in range(1, len(previous)):
-#         if previous[k] == proposed[k]:
-#             continue
-#         num = np.log(M[alphabet.index(previous[k]), alphabet.index(previous[k-1])])
-#         den = np.log(M[alphabet.index(proposed[k]), alphabet.index(proposed[k-1])])
-#         ratio = num - den
-#         pyf += ratio
-#         print(num, den, ratio, pyf)
-#     print(pyf)
-#     pyf = np.exp(pyf)
 
 def initialize_f_inv(ciphertext, alphabet, P):
     p = {}
@@ -262,10 +222,10 @@ def find_space_and_period(ciphertext, alphabet):
     pos_and_zero_mat = top_n_pair_counts[pos_and_zero_inds,:]
     pos_and_zero_ind, space_ind, _ = np.unravel_index(pos_and_zero_mat.argmax(), pos_and_zero_mat.shape)
     period_ind = pos_and_zero_inds[0][pos_and_zero_ind]
-    print(mat[period_ind])
+    # print(mat[period_ind])
     space_ind = mat[period_ind].argmax()
-    print("period_ind: {}, space_ind: {}".format(period_ind, space_ind))
-    print("period_letter: {}, space_letter: {}".format(alphabet[period_ind], alphabet[space_ind]))
+    # print("period_ind: {}, space_ind: {}".format(period_ind, space_ind))
+    # print("period_letter: {}, space_letter: {}".format(alphabet[period_ind], alphabet[space_ind]))
     return period_ind, space_ind
 
 
@@ -278,6 +238,14 @@ def decode_ciphertext(ciphertext, f_inv, alphabet):
         plaintext += alphabet[f_inv[letter]]
     return plaintext
 
+def plot_log_likelihood(log_l):
+    ts = range(1, len(log_l))
+    plt.figure('log likelihood')
+    plt.plot(ts, log_l[1:])
+    plt.xlabel('Iteration Number')
+    plt.ylabel('Log-Likelihood (Of Accepted Mapping)')
+    plt.savefig('plots/log_likelihood.png')
+
 def plot_log_likelihood_per_symbol(log_l, num_symbols):
     ts = range(1, len(log_l))
     plt.figure('likelihood')
@@ -285,7 +253,8 @@ def plot_log_likelihood_per_symbol(log_l, num_symbols):
     logl_per_symb = log_l[1:]/float(num_symbols)
     plt.plot(ts, logl_per_symb)
     plt.xlabel('Iteration Number')
-    plt.ylabel('Log-Likelihood Per Symbol (Under Accepted Mapping) (bits)')
+    plt.ylabel('Log-Likelihood Per Symbol (Of Accepted Mapping) (bits)')
+    plt.savefig('plots/log_likelihood_per_symbol.png')
 
 def plot_acceptance_rate(a, T):
     ts = range(T+1, len(a))
@@ -298,6 +267,8 @@ def plot_acceptance_rate(a, T):
     plt.plot(ts, rates)
     plt.xlabel('Iteration Number')
     plt.ylabel('Acceptance Rate')
+    plt.savefig('plots/acceptance_rate.png')
+    return rates
 
 def compute_accuracy(true_plaintext, ciphertext, f_inv, alphabet):
     decoded = decode_ciphertext(ciphertext, f_inv, alphabet)
@@ -314,6 +285,8 @@ def plot_accuracy(true_plaintext, ciphertext, f_inv, alphabet):
     plt.plot(ts, accs)
     plt.xlabel('Iteration Number')
     plt.ylabel('Decoded Accuracy')
+    plt.savefig('plots/accuracy.png')
+    return accs
 
 def test_likelihood():
     M = np.loadtxt(open("data/letter_transition_matrix.csv", "rb"), delimiter=",")
@@ -323,16 +296,30 @@ def test_likelihood():
 if __name__ == '__main__':
     # test_likelihood()
     # with open('data/ciphertext_feynman.txt', 'r') as file:
-    with open('data/ciphertext_paradiselost.txt', 'r') as file:
+    # with open('data/ciphertext_paradiselost.txt', 'r') as file:
     # with open('data/ciphertext_warandpeace.txt', 'r') as file:
     # with open('data/ciphertext_short.txt', 'r') as file:
-    # with open('data/ciphertext.txt', 'r') as file:
+    # with open('data/ciphertext_meghan.txt', 'r') as file:
     # with open('test_ciphertext.txt', 'r') as file:
+    with open('data/ciphertext.txt', 'r') as file:
         ciphertext = file.read().rstrip('\n') # remove trailing \n
-    # true_plaintext = "the dog runs. and the cat swims."
-    # ciphertext = "the dog runs. and the cat swims."
-    # ciphertext = "the qog runs. and the cat swims."
-    # ciphertext = "thelqoglruns.landlthelcatlswims."
-    true_plaintext = None
-    decode(ciphertext, has_breakpoint=False, true_plaintext=true_plaintext)
+    decoded, acc_rate = decode(ciphertext, has_breakpoint=False)
+
+    # crop_lengths = [100, 200, 300, 500, 1000, 2000, 5000]
+    # # crop_lengths = [100, 200, 500]
+    # ts = None
+    # for length in crop_lengths:
+    #     CROP_LENGTH = length
+    #     with open('data/ciphertext.txt', 'r') as file:
+    #         ciphertext = file.read().rstrip('\n')[:CROP_LENGTH] # remove trailing \n
+    #     decoded, acc_rate = decode(ciphertext, has_breakpoint=False)
+    #     if ts is None:
+    #         ts = range(len(acc_rate))
+    #     plt.figure('seqlen')
+    #     plt.plot(ts, acc_rate, label=str(length))
+    #     plt.xlabel('Iteration Number')
+    #     plt.ylabel('Decoded Accuracy')
+    # plt.legend(title="Text Length", loc=4)
+    # plt.savefig('plots/seqlen.png')
+    # plt.show()
 
