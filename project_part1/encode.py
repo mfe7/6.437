@@ -64,7 +64,11 @@ def main():
     if has_breakpoint:
         encode_with_breakpoint(sys.argv[1], sys.argv[2])
     else:
-        encode(sys.argv[1], sys.argv[2], cipher_fn_filename=sys.argv[4])
+        if len(sys.argv) <= 4:
+            cipher_fn_filename = None
+        else:
+            cipher_fn_filename = sys.argv[4]
+        encode(sys.argv[1], sys.argv[2], cipher_fn_filename=cipher_fn_filename)
 
 if __name__ == '__main__':
     main()

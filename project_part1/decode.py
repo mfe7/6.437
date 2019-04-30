@@ -20,14 +20,13 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
     M = np.loadtxt(open("data/letter_transition_matrix.csv", "rb"), delimiter=",")
     P = np.loadtxt(open("data/letter_probabilities.csv", "rb"), delimiter=",")
 
-    find_space_and_period(ciphertext, alphabet)
-
     if true_plaintext is None:
         # with open('test_plaintext.txt', 'r') as file:
-        with open('data/plaintext.txt', 'r') as file:
+        # with open('data/plaintext.txt', 'r') as file:
         # with open('data/plaintext_short.txt', 'r') as file:
         # with open('data/plaintext_warandpeace.txt', 'r') as file:
         # with open('data/plaintext_feynman.txt', 'r') as file:
+        with open('data/plaintext_paradiselost.txt', 'r') as file:
             true_plaintext = file.read().rstrip('\n') # remove trailing \n
 
     a = np.empty((N+1))
@@ -48,11 +47,13 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
 
     f_inv[0] = initialize_f_inv(ciphertext, alphabet, P)
 
-    with open('data/cipher_function.csv', 'rb') as f:
-        reader = csv.reader(f)
-        cipher_function = list(reader)[0]
-    letters_to_get_correct = ["."," "]
-    f_inv[0] = set_letters_correctly(letters_to_get_correct, alphabet, cipher_function, f_inv[0])
+    # with open('data/cipher_function.csv', 'rb') as f:
+    #     reader = csv.reader(f)
+    #     cipher_function = list(reader)[0]
+    # print(cipher_function)
+
+    period_ind, space_ind = find_space_and_period(ciphertext, alphabet)
+    f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
 
     # for i, letter in enumerate(cipher_function):
     #     # REMOVE LATER -- JUST TO TEST WITH THE RIGHT F
@@ -84,15 +85,6 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
         # print('-----')
         # print("proposed decoding: {}".format(decode_ciphertext(ciphertext, f_inv[n], alphabet)))
         # assert(0)
-
-        # # propose new cipher mapping by shuffling all indices
-        # keys = f_inv[n-1].keys()
-        # values = f_inv[n-1].values()
-        # np.random.shuffle(values)
-        # f_inv[n] = dict(zip(keys, values))
-        # print("Previous mapping: {}".format(f_inv[n-1]))
-        # print("Proposed mapping: {}".format(f_inv[n]))
-        # print("prev mapping plaintext: {}".format(decode_ciphertext(ciphertext, f_inv[n-1],alphabet)))
 
         # compute log_likelihoods of the ciphertext under the new and old mappings
         log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood2(P, M, f_inv[n], f_inv[n-1], ciphertext, alphabet)
@@ -167,22 +159,39 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
 #     l = P[f_inv[ciphertext[0]]]*np.product([np.log(M[f_inv[ciphertext[k]], f_inv[ciphertext[k-1]]]) for k in range(1, len(ciphertext))])
 #     return l
 
-def set_letters_correctly(letters_to_get_correct, alphabet, cipher_function, f_inv):
+def set_letters_correctly(letters_to_get_correct, letter_inds, alphabet, f_inv):
     # only set space and . to be the correct mapping
-    for letter_to_get_correct in letters_to_get_correct:
+    for k in range(len(letters_to_get_correct)):
+        letter_to_get_correct = letters_to_get_correct[k]
         letter_alphabet_ind = alphabet.index(letter_to_get_correct) # where is the letter in the normal alphabet
-        letter_inv = cipher_function[letter_alphabet_ind] # letter the letter should be encoded as
-        # print("the letter: '{}' should be encoded as '{}'".format(letter_to_get_correct, letter_inv))
-        # print("but currently we decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[0][letter_inv]]))
+        letter_inv = alphabet[letter_inds[k]] # letter the letter should be encoded as
+        print("the letter: '{}' should be encoded as '{}'".format(letter_to_get_correct, letter_inv))
+        print("but currently we decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[letter_inv]]))
         for i, letter in enumerate(f_inv.keys()):
             if f_inv[letter] == letter_alphabet_ind:
                 period_letter = letter
         f_inv[period_letter] = f_inv[letter_inv]
         f_inv[letter_inv] = letter_alphabet_ind
-        # print("After fixing.....")
-        # print("and we now decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[0][letter_inv]]))
-        # print('-----')
+        print("After fixing.....")
+        print("and we now decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[letter_inv]]))
     return f_inv
+
+# def set_letters_correctly(letters_to_get_correct, alphabet, cipher_function, f_inv):
+#     # only set space and . to be the correct mapping
+#     for letter_to_get_correct in letters_to_get_correct:
+#         letter_alphabet_ind = alphabet.index(letter_to_get_correct) # where is the letter in the normal alphabet
+#         letter_inv = cipher_function[letter_alphabet_ind] # letter the letter should be encoded as
+#         # print("the letter: '{}' should be encoded as '{}'".format(letter_to_get_correct, letter_inv))
+#         # print("but currently we decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[0][letter_inv]]))
+#         for i, letter in enumerate(f_inv.keys()):
+#             if f_inv[letter] == letter_alphabet_ind:
+#                 period_letter = letter
+#         f_inv[period_letter] = f_inv[letter_inv]
+#         f_inv[letter_inv] = letter_alphabet_ind
+#         # print("After fixing.....")
+#         # print("and we now decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[0][letter_inv]]))
+#         # print('-----')
+#     return f_inv
 
 def compute_likelihood2(P, M, f_inv_new, f_inv, ciphertext, alphabet):
     # with open('data/plaintext_short.txt', 'r') as file:
@@ -249,11 +258,15 @@ def find_space_and_period(ciphertext, alphabet):
     for k in range(1, len(ciphertext)):
         mat[alphabet.index(ciphertext[k-1]), alphabet.index(ciphertext[k])] += 1
     top_n_pair_counts = np.sort(np.partition(mat, -2)[:,-2:])
-    print(top_n_pair_counts)
-    pos_and_zero_inds = np.where(np.all(top_n_pair_counts[:,0] == 0, top_n_pair_counts[:,1] > 0))
-    print(pos_and_zero_inds)
-    # print(mat)
-    assert(0)
+    pos_and_zero_inds = np.where(np.logical_and(top_n_pair_counts[:,0] == 0, top_n_pair_counts[:,1] > 0))
+    pos_and_zero_mat = top_n_pair_counts[pos_and_zero_inds,:]
+    pos_and_zero_ind, space_ind, _ = np.unravel_index(pos_and_zero_mat.argmax(), pos_and_zero_mat.shape)
+    period_ind = pos_and_zero_inds[0][pos_and_zero_ind]
+    print(mat[period_ind])
+    space_ind = mat[period_ind].argmax()
+    print("period_ind: {}, space_ind: {}".format(period_ind, space_ind))
+    print("period_letter: {}, space_letter: {}".format(alphabet[period_ind], alphabet[space_ind]))
+    return period_ind, space_ind
 
 
 def finv_to_f(f_inv):
@@ -310,9 +323,10 @@ def test_likelihood():
 if __name__ == '__main__':
     # test_likelihood()
     # with open('data/ciphertext_feynman.txt', 'r') as file:
+    with open('data/ciphertext_paradiselost.txt', 'r') as file:
     # with open('data/ciphertext_warandpeace.txt', 'r') as file:
     # with open('data/ciphertext_short.txt', 'r') as file:
-    with open('data/ciphertext.txt', 'r') as file:
+    # with open('data/ciphertext.txt', 'r') as file:
     # with open('test_ciphertext.txt', 'r') as file:
         ciphertext = file.read().rstrip('\n') # remove trailing \n
     # true_plaintext = "the dog runs. and the cat swims."
