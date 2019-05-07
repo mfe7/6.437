@@ -14,7 +14,7 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
     print("********")
 
     np.random.seed(seed=124)
-    N = int(1500) # num_iterations
+    N = int(1e6) # num_iterations
     with open('data/alphabet.csv', 'rb') as f:
         reader = csv.reader(f)
         alphabet = list(reader)[0]
@@ -22,16 +22,17 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
     M = np.loadtxt(open("data/letter_transition_matrix.csv", "rb"), delimiter=",")
     P = np.loadtxt(open("data/letter_probabilities.csv", "rb"), delimiter=",")
 
-    if true_plaintext is None:
-        # with open('test_plaintext.txt', 'r') as file:
-        with open('data/plaintext.txt', 'r') as file:
-        # with open('data/plaintext_meghan.txt', 'r') as file:
-        # with open('data/plaintext_short.txt', 'r') as file:
-        # with open('data/plaintext_warandpeace.txt', 'r') as file:
-        # with open('data/plaintext_feynman.txt', 'r') as file:
-        # with open('data/plaintext_paradiselost.txt', 'r') as file:
-            # true_plaintext = file.read().rstrip('\n')[:CROP_LENGTH] # remove trailing \n
-            true_plaintext = file.read().rstrip('\n') # remove trailing \n
+    # if true_plaintext is None:
+    #     # with open('test_plaintext.txt', 'r') as file:
+    #     # with open('data/plaintext.txt', 'r') as file:
+    #     # with open('data/plaintext_patrick.txt', 'r') as file:
+    #     # with open('data/plaintext_meghan.txt', 'r') as file:
+    #     # with open('data/plaintext_short.txt', 'r') as file:
+    #     # with open('data/plaintext_warandpeace.txt', 'r') as file:
+    #     # with open('data/plaintext_feynman.txt', 'r') as file:
+    #     # with open('data/plaintext_paradiselost.txt', 'r') as file:
+    #         # true_plaintext = file.read().rstrip('\n')[:CROP_LENGTH] # remove trailing \n
+    #         true_plaintext = file.read().rstrip('\n') # remove trailing \n
 
     a = np.empty((N+1))
     pyf = np.empty((N+1))
@@ -54,6 +55,8 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
     period_ind, space_ind = find_space_and_period(ciphertext, alphabet)
     f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
 
+    vowel_inds = [alphabet.index(vowel) for vowel in ['a','e','i','o','u']]
+
     # with open('data/cipher_function.csv', 'rb') as f:
     #     reader = csv.reader(f)
     #     cipher_function = list(reader)[0]
@@ -75,14 +78,46 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
         # print("-------")
         # print("Step: {}".format(n))
 
+        f_inv[n] = deepcopy(f_inv[n-1])
+
+        # if n % 100 == 0:
+        #     # try swapping vowels
+        #     vowel_keys = []
+        #     for key in f_inv[n-1].keys():
+        #         if f_inv[n-1][key] in vowel_inds:
+        #             vowel_keys.append(key)
+        #     # i, j = np.random.choice(vowel_keys, 2, replace=False)
+        #     num_swaps = 1
+        #     swaps = np.random.choice(vowel_keys, 2*num_swaps, replace=False)
+        #     i, j = swaps
+        #     print("Random swap of: ({},{})".format(i,j))
+        #     print("we think those are: ({},{})".format(alphabet[f_inv[n-1][i]], alphabet[f_inv[n-1][j]]))
+        #     for swap in range(num_swaps):
+        #         i, j = swaps[2*swap:2+2*swap]
+        #         f_inv[n][i] = f_inv[n-1][j]
+        #         f_inv[n][j] = f_inv[n-1][i]
+        
+        # else:
         # Sample two indices from the previous cipher mapping
-        i, j = np.random.choice(alphabet, 2, replace=False)
+        # i, j = np.random.choice(alphabet, 2, replace=False)
+        num_swaps = 1
+        swaps = np.random.choice(alphabet, 2*num_swaps, replace=False)
+        for swap in range(num_swaps):
+            i, j = swaps[2*swap:2+2*swap]
+            f_inv[n][i] = f_inv[n-1][j]
+            f_inv[n][j] = f_inv[n-1][i]
         # print("Random swap of: ({},{})".format(i,j))
 
         # propose new cipher mapping by swapping at those 2 sampled indices
-        f_inv[n] = deepcopy(f_inv[n-1])
-        f_inv[n][i] = f_inv[n-1][j]
-        f_inv[n][j] = f_inv[n-1][i]
+        # f_inv[n][i] = f_inv[n-1][j]
+        # f_inv[n][j] = f_inv[n-1][i]
+        
+
+
+        # if n % 100 == 0:
+        #     print(decode_ciphertext(ciphertext, f_inv[n-1], alphabet)[:500])
+        #     print('--')
+        #     print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:500])
 
         # compute log_likelihoods of the ciphertext under the new and old mappings
         log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood(P, M, f_inv[n], f_inv[n-1], ciphertext, alphabet)
@@ -113,11 +148,14 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
             break
         if n % 10 == 0:
             print("Step: {}".format(n))
-            print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
+            # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
             print("log_l_new[n]: {}".format(log_l_new[n]))
             print("log_l_old[n]: {}".format(log_l_old[n]))
             print("log_pyf[n]: {}".format(log_pyf[n]))
             print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:500])
+            # print("accept[n]: {}".format(accept[n]))
+            # if accept[n]:
+            #     assert(0)
             print("-----")
         # if n == 40:
         #     break
@@ -128,11 +166,12 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
 
     plot_log_likelihood(log_likelihood[:n+1])
     plot_acceptance_rate(accept[:n+1], T=20)
-    accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
+    # accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
     plot_log_likelihood_per_symbol(log_likelihood[:n+1], len(ciphertext))
     # plt.show()
 
     print(plaintext)
+    accuracy = 0
     return plaintext, accuracy
     # return plaintext
 
@@ -220,12 +259,14 @@ def find_space_and_period(ciphertext, alphabet):
     top_n_pair_counts = np.sort(np.partition(mat, -2)[:,-2:])
     pos_and_zero_inds = np.where(np.logical_and(top_n_pair_counts[:,0] == 0, top_n_pair_counts[:,1] > 0))
     pos_and_zero_mat = top_n_pair_counts[pos_and_zero_inds,:]
-    pos_and_zero_ind, space_ind, _ = np.unravel_index(pos_and_zero_mat.argmax(), pos_and_zero_mat.shape)
-    period_ind = pos_and_zero_inds[0][pos_and_zero_ind]
+    _, period_ind_, _ = np.unravel_index(pos_and_zero_mat.argmax(), pos_and_zero_mat.shape)
+    period_ind = pos_and_zero_inds[0][period_ind_]
     # print(mat[period_ind])
     space_ind = mat[period_ind].argmax()
+    # print(mat[period_ind])
     # print("period_ind: {}, space_ind: {}".format(period_ind, space_ind))
     # print("period_letter: {}, space_letter: {}".format(alphabet[period_ind], alphabet[space_ind]))
+    # assert(0)
     return period_ind, space_ind
 
 
@@ -296,12 +337,13 @@ def test_likelihood():
 if __name__ == '__main__':
     # test_likelihood()
     # with open('data/ciphertext_feynman.txt', 'r') as file:
-    # with open('data/ciphertext_paradiselost.txt', 'r') as file:
+    with open('data/ciphertext_paradiselost.txt', 'r') as file:
     # with open('data/ciphertext_warandpeace.txt', 'r') as file:
     # with open('data/ciphertext_short.txt', 'r') as file:
     # with open('data/ciphertext_meghan.txt', 'r') as file:
+    # with open('data/ciphertext_patrick.txt', 'r') as file:
     # with open('test_ciphertext.txt', 'r') as file:
-    with open('data/ciphertext.txt', 'r') as file:
+    # with open('data/ciphertext.txt', 'r') as file:
         ciphertext = file.read().rstrip('\n') # remove trailing \n
     decoded, acc_rate = decode(ciphertext, has_breakpoint=False)
 
