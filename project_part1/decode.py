@@ -265,7 +265,8 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
     if debug:
         print("final answer....")
         print(plaintext[:100] + " ... " + plaintext[-100:])
-        print("breakpt: {}".format(breakpt[n]))
+        if has_breakpoint:
+            print("breakpt: {}".format(breakpt[n]))
 
     # print(plaintext)
     accuracy = 0
@@ -549,7 +550,11 @@ def test_likelihood():
     compute_likelihood3(P,M,"test.ametter", "test. letter")
 
 if __name__ == '__main__':
-    # test_likelihood()
+    # ciphertext_filename = 'data/ciphertext_warandpeace_breakpoint.txt'
+    # ciphertext_filename = 'data/ciphertext_warandpeace.txt'
+    ciphertext_filename = 'data/ciphertext_paradiselost_breakpoint.txt'
+    # ciphertext_filename = 'data/ciphertext_paradiselost.txt'
+
     # with open('data/ciphertext_warandpeace.txt', 'r') as file:
     # with open('data/ciphertext_paradiselost.txt', 'r') as file:
     # with open('data/ciphertext_short.txt', 'r') as file:
@@ -559,9 +564,11 @@ if __name__ == '__main__':
     # with open('data/ciphertext.txt', 'r') as file:
     # with open('data/ciphertext_feynman.txt', 'r') as file:
     # with open('data/ciphertext_feynman_breakpoint.txt', 'r') as file:
-    with open('data/ciphertext_warandpeace_breakpoint.txt', 'r') as file:
+    with open(ciphertext_filename, 'r') as file:
         ciphertext = file.read().rstrip('\n') # remove trailing \n
-    decoded = decode(ciphertext, has_breakpoint=True, debug=True)
+
+    has_breakpoint = 'breakpoint' in ciphertext_filename
+    decoded = decode(ciphertext, has_breakpoint=has_breakpoint, debug=True)
     # decoded = decode(ciphertext, has_breakpoint=False)
 
     # crop_lengths = [100, 200, 300, 500, 1000, 2000, 5000]
