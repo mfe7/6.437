@@ -7,14 +7,16 @@ import operator
 
 CROP_LENGTH = 500
 
+np.seterr(all='ignore')
+
 def decode(ciphertext, has_breakpoint, true_plaintext=None):
     n_to_stop = None
-    print("********")
-    print("** ciphertext: {}".format(ciphertext))
-    print("********")
+    # print("********")
+    # print("** ciphertext: {}".format(ciphertext))
+    # print("********")
 
     np.random.seed(seed=124)
-    N = int(1e6) # num_iterations
+    N = int(1e3) # num_iterations
     with open('data/alphabet.csv', 'rb') as f:
         reader = csv.reader(f)
         alphabet = list(reader)[0]
@@ -131,7 +133,7 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
         # print("a[n]: {}".format(a[n]))
 
         # sample from bernoulli whether to accept or reject new mapping
-        accept[n] = np.random.choice([True, False], p=[a[n], 1-a[n]])
+        accept[n] = np.random.binomial(n=1, p=a[n])
         # print("accept[n]: {}".format(accept[n]))
 
         # if reject, copy old mapping to new mapping (reject new sample fn)
@@ -144,36 +146,37 @@ def decode(ciphertext, has_breakpoint, true_plaintext=None):
             log_likelihood[n] = log_l_new[n] # accept the new mapping, so use it to compute log_likelihood
             # if n_to_stop is None:
             #     n_to_stop = n + 20
+        
         if n == n_to_stop:
             break
-        if n % 10 == 0:
-            print("Step: {}".format(n))
-            # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
-            print("log_l_new[n]: {}".format(log_l_new[n]))
-            print("log_l_old[n]: {}".format(log_l_old[n]))
-            print("log_pyf[n]: {}".format(log_pyf[n]))
-            print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:500])
-            # print("accept[n]: {}".format(accept[n]))
-            # if accept[n]:
-            #     assert(0)
-            print("-----")
-        # if n == 40:
-        #     break
-
+        
+        ### Debug Msgs
+        # if n % 10 == 0:
+        #     print("Step: {}".format(n))
+        #     # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
+        #     print("log_l_new[n]: {}".format(log_l_new[n]))
+        #     print("log_l_old[n]: {}".format(log_l_old[n]))
+        #     print("log_pyf[n]: {}".format(log_pyf[n]))
+        #     print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:500])
+        #     # print("accept[n]: {}".format(accept[n]))
+        #     # if accept[n]:
+        #     #     assert(0)
+        #     print("-----")
+        
     # after MCMC has converged to proper distribution, use it to decode
     plaintext = decode_ciphertext(ciphertext, f_inv[n], alphabet)
     # f[n] = finv_to_f(f_inv[n])
 
-    plot_log_likelihood(log_likelihood[:n+1])
-    plot_acceptance_rate(accept[:n+1], T=20)
-    # accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
-    plot_log_likelihood_per_symbol(log_likelihood[:n+1], len(ciphertext))
+    # plot_log_likelihood(log_likelihood[:n+1])
+    # plot_acceptance_rate(accept[:n+1], T=20)
+    # # accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
+    # plot_log_likelihood_per_symbol(log_likelihood[:n+1], len(ciphertext))
     # plt.show()
 
-    print(plaintext)
+    # print(plaintext)
     accuracy = 0
-    return plaintext, accuracy
-    # return plaintext
+    # return plaintext, accuracy
+    return plaintext
 
 def set_letters_correctly(letters_to_get_correct, letter_inds, alphabet, f_inv):
     # only set space and . to be the correct mapping
@@ -259,10 +262,13 @@ def find_space_and_period(ciphertext, alphabet):
     top_n_pair_counts = np.sort(np.partition(mat, -2)[:,-2:])
     pos_and_zero_inds = np.where(np.logical_and(top_n_pair_counts[:,0] == 0, top_n_pair_counts[:,1] > 0))
     pos_and_zero_mat = top_n_pair_counts[pos_and_zero_inds,:]
-    _, period_ind_, _ = np.unravel_index(pos_and_zero_mat.argmax(), pos_and_zero_mat.shape)
-    period_ind = pos_and_zero_inds[0][period_ind_]
-    # print(mat[period_ind])
-    space_ind = mat[period_ind].argmax()
+    try:
+        _, period_ind_, _ = np.unravel_index(pos_and_zero_mat.argmax(), pos_and_zero_mat.shape)
+        period_ind = pos_and_zero_inds[0][period_ind_]
+        # print(mat[period_ind])
+        space_ind = mat[period_ind].argmax()
+    except:
+        period_ind = 0; space_ind = 1
     # print(mat[period_ind])
     # print("period_ind: {}, space_ind: {}".format(period_ind, space_ind))
     # print("period_letter: {}, space_letter: {}".format(alphabet[period_ind], alphabet[space_ind]))

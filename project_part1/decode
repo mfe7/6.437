@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # Usage: ./decode ciphertext has_breakpoint
-# Example: ./decode `cat test_ciphertext.txt` false
+# Example: ./decode "`cat test_ciphertext.txt`" false
 #
 # Reads ciphertext as first command line argument, prints plaintext to stdout
 import sys
