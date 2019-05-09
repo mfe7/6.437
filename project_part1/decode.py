@@ -9,6 +9,7 @@ CROP_LENGTH = 500
 
 np.seterr(all='ignore')
 
+# @profile
 def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
     n_to_stop = None
     # print("********")
@@ -35,6 +36,25 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
     #     # with open('data/plaintext_paradiselost.txt', 'r') as file:
     #         # true_plaintext = file.read().rstrip('\n')[:CROP_LENGTH] # remove trailing \n
     #         true_plaintext = file.read().rstrip('\n') # remove trailing \n
+
+    # # generic version
+    # letters_per_gram = 2
+    # english_ngram_dict = {}
+    # with open('data/ngrams{}.csv'.format(2), 'rb') as f:
+    #     reader = csv.reader(f)
+    #     next(reader) # skip first line
+    #     total_num_grams = float(sum(int(r[1]) for r in reader))
+    #     f.seek(0) # reset to start of csv to get normalized counts
+    #     next(reader)
+    #     english_ngram_dict = {row[0].lower() : np.log2(int(row[1])/total_num_grams) for row in reader}
+
+    # provided M matrix version (only works for 2-grams!!)
+    letters_per_gram = 2
+    english_ngram_dict = {}
+    M_logl = np.log2(M/np.sum(M))
+    for i, letter1 in enumerate(alphabet):
+        for j, letter2 in enumerate(alphabet):
+            english_ngram_dict[letter1+letter2] = M_logl[j,i]
 
     a = np.empty((N+1))
     pyf = np.empty((N+1))
@@ -69,28 +89,17 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
         late_alphabet.remove(alphabet[late_period_ind])
         late_alphabet.remove(alphabet[late_space_ind])
 
+        early_ciphertext_dict = ciphertext_to_dict(early_ciphertext, letters_per_gram=letters_per_gram)
+        late_ciphertext_dict = ciphertext_to_dict(late_ciphertext, letters_per_gram=letters_per_gram)
+
     else:
         period_ind, space_ind = find_space_and_period(full_ciphertext, alphabet)
         f_inv[0] = initialize_f_inv(full_ciphertext, alphabet, P)
         f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
 
-    vowel_inds = [alphabet.index(vowel) for vowel in ['a','e','i','o','u']]
+        full_ciphertext_dict = ciphertext_to_dict(full_ciphertext, letters_per_gram=letters_per_gram)
 
-    # with open('data/cipher_function.csv', 'rb') as f:
-    #     reader = csv.reader(f)
-    #     cipher_function = list(reader)[0]
-    # print(cipher_function)
-    # for i, letter in enumerate(cipher_function):
-    #     # REMOVE LATER -- JUST TO TEST WITH THE RIGHT F
-    #     f_inv[0][letter] = i
-    # # print("correct fn:", f_inv[0])
-    # f_inv_orig = deepcopy(f_inv[0])
-    # # remappings = [["c","d"], ["e","f"], ["a","b"], ["g","h"]]
-    # for kk in range(4):
-    #     i, j = np.random.choice(alphabet, 2, replace=False)
-    #     # i,j = remappings[kk]
-    #     f_inv[0][i] = f_inv_orig[j]
-    #     f_inv[0][j] = f_inv_orig[i]
+    vowel_inds = [alphabet.index(vowel) for vowel in ['a','e','i','o','u']]
 
     # print("Initial state:")
     # print("f_inv[0]: {}".format(f_inv[0]))
@@ -140,11 +149,13 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
                     # print("proposed new 1st half")
                     mapping = f_inv
                     ciphertext = early_ciphertext
+                    ciphertext_dict = early_ciphertext_dict
                     this_alphabet = early_alphabet
                 else:
                     # print("proposed new 2nd half")
                     mapping = f_inv2
                     ciphertext = late_ciphertext
+                    ciphertext_dict = late_ciphertext_dict
                     this_alphabet = late_alphabet
                 num_swaps = 1
                 swaps = np.random.choice(this_alphabet, 2*num_swaps, replace=False)
@@ -178,9 +189,10 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
         # compute log_likelihoods of the ciphertext under the new and old mappings
 
         if has_breakpoint:
-            log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood_breakpt(P, M, mapping[n], mapping[n-1], ciphertext, this_alphabet)
+            log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood_dict(english_ngram_dict, mapping[n], mapping[n-1], ciphertext_dict, alphabet)
         else:
-            log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood(P, M, f_inv[n], f_inv[n-1], full_ciphertext, alphabet)
+            # log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood(P, M, f_inv[n], f_inv[n-1], full_ciphertext, alphabet)
+            log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood_dict(english_ngram_dict, f_inv[n], f_inv[n-1], full_ciphertext_dict, alphabet)
 
         if np.isinf(log_l_old[n]):
             pyf[n] = 0.
@@ -279,14 +291,15 @@ def set_letters_correctly(letters_to_get_correct, letter_inds, alphabet, f_inv):
         # print("and we now decode '{}' as '{}'.".format(letter_inv, alphabet[f_inv[letter_inv]]))
     return f_inv
 
-def get_ciphertext_pairs(ciphertext):
-    pairs = {}
-    for k in range(1, len(ciphertext)):
-        pair = ciphertext[k:k+2]
-        if pair in pairs:
-            pairs[pair] += 1
+def ciphertext_to_dict(ciphertext, letters_per_gram=2):
+    gram_counts = {}
+    for k in range(len(ciphertext)-letters_per_gram):
+        gram = ciphertext[k:k+letters_per_gram]
+        if gram in gram_counts:
+            gram_counts[gram] += 1
         else:
-            pairs[pair] = 1
+            gram_counts[gram] = 0
+    return gram_counts
 
 def compute_likelihood_breakpt(P, M, mapping_new, mapping_old, ciphertext, alphabet):
     log_pyf = 0
@@ -338,6 +351,37 @@ def compute_likelihood(P, M, f_inv_new, f_inv, ciphertext, alphabet):
         log_pyf += ratio
         # print(true_plaintext[k], ciphertext[k], alphabet[f_inv[ciphertext[k]]], alphabet[f_inv[ciphertext[k-1]]], num, den, ratio, log_pyf)
         # print(ciphertext[k], num, den, ratio, pyf)
+    return log_pyf, log_new, log_old
+
+def compute_likelihood_dict(english_gram_counts, f_inv_new, f_inv, ciphertext_gram_counts, alphabet):
+    log_pyf = 0
+    log_new = 0
+    log_old = 0
+    for gram, count in ciphertext_gram_counts.items():
+        decoded_gram_new = ''.join([alphabet[f_inv_new[letter]] for letter in gram])
+        decoded_gram = ''.join([alphabet[f_inv[letter]] for letter in gram])
+
+        # if ' ' in decoded_gram or ' ' in decoded_gram_new or '.' in decoded_gram or '.' in decoded_gram_new:
+        #     continue
+        # if decoded_gram_new in english_gram_counts:
+        #     decoded_gram_new_logl = english_gram_counts[decoded_gram_new]
+        # else:
+        #     decoded_gram_new_logl = -50
+        # if decoded_gram in english_gram_counts:
+        #     decoded_gram_logl = english_gram_counts[decoded_gram]
+        # else:
+        #     decoded_gram_logl = -50
+
+        decoded_gram_new_logl = max(english_gram_counts[decoded_gram_new], -50)
+        decoded_gram_logl = max(english_gram_counts[decoded_gram], -50)
+
+        num = count * decoded_gram_new_logl
+        den = count * decoded_gram_logl
+        log_new += num
+        log_old += den
+        ratio = num - den
+        log_pyf += ratio
+
     return log_pyf, log_new, log_old
 
 def initialize_f_inv(ciphertext, alphabet, P):
@@ -535,10 +579,10 @@ if __name__ == '__main__':
     # with open('data/ciphertext_short.txt', 'r') as file:
     # with open('data/ciphertext_meghan.txt', 'r') as file:
     # with open('data/ciphertext_patrick.txt', 'r') as file:
-    with open('test_ciphertext_breakpoint.txt', 'r') as file:
+    # with open('test_ciphertext_breakpoint.txt', 'r') as file:
     # with open('data/ciphertext.txt', 'r') as file:
     # with open('data/ciphertext_feynman.txt', 'r') as file:
-    # with open('data/ciphertext_feynman_breakpoint.txt', 'r') as file:
+    with open('data/ciphertext_feynman_breakpoint.txt', 'r') as file:
         ciphertext = file.read().rstrip('\n') # remove trailing \n
     decoded = decode(ciphertext, has_breakpoint=True, debug=True)
     # decoded = decode(ciphertext, has_breakpoint=False)
