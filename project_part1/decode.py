@@ -9,14 +9,14 @@ CROP_LENGTH = 500
 
 np.seterr(all='ignore')
 
-def decode(full_ciphertext, has_breakpoint, true_plaintext=None):
+def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
     n_to_stop = None
     # print("********")
     # print("** ciphertext: {}".format(ciphertext))
     # print("********")
 
     np.random.seed(seed=124)
-    N = int(1e3) # num_iterations
+    N = int(1e4) # num_iterations
     with open('data/alphabet.csv', 'rb') as f:
         reader = csv.reader(f)
         alphabet = list(reader)[0]
@@ -217,32 +217,32 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None):
             break
         
         ### Debug Msgs
-        # if n % 10 == 0:
-        #     print("Step: {}".format(n))
-        #     # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
-        #     print("log_l_new[n]: {}".format(log_l_new[n]))
-        #     print("log_l_old[n]: {}".format(log_l_old[n]))
-        #     print("log_pyf[n]: {}".format(log_pyf[n]))
-        #     # print('--')
-        #     # print("previous: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n-1], alphabet)))
-        #     # print("proposed: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
-        #     print("{}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
-        #     # print('--')
-        #     if has_breakpoint:
-        #         # print("breakpoint: {}".format(breakpt[n]))
-        #         # print('--')
-        #         # print("previous: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n-1], alphabet)))
-        #         # print("proposed: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
-        #         print("{}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
+        if n % 10 == 0 and debug:
+            print("Step: {}".format(n))
+            # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
+            print("log_l_new[n]: {}".format(log_l_new[n]))
+            print("log_l_old[n]: {}".format(log_l_old[n]))
+            print("log_pyf[n]: {}".format(log_pyf[n]))
+            # print('--')
+            # print("previous: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n-1], alphabet)))
+            # print("proposed: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
+            print("{}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
+            # print('--')
+            if has_breakpoint:
+                # print("breakpoint: {}".format(breakpt[n]))
+                # print('--')
+                # print("previous: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n-1], alphabet)))
+                # print("proposed: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
+                print("{}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
 
-        #     # print("accept[n]: {}".format(accept[n]))
-        #     # if accept[n]:
-        #     #     assert(0)
-        #     print("-----")
+            # print("accept[n]: {}".format(accept[n]))
+            # if accept[n]:
+            #     assert(0)
+            print("-----")
 
     # after MCMC has converged to proper distribution, use it to decode
     if has_breakpoint:
-        plaintext = decode_ciphertext(full_ciphertext[breakpt[n]:], f_inv2[n], alphabet) + decode_ciphertext(full_ciphertext[-breakpt[n]:], f_inv2[n], alphabet)
+        plaintext = decode_ciphertext(full_ciphertext[:breakpt[n]], f_inv[n], alphabet) + decode_ciphertext(full_ciphertext[breakpt[n]:], f_inv2[n], alphabet)
     else:
         plaintext = decode_ciphertext(full_ciphertext, f_inv[n], alphabet)
     # f[n] = finv_to_f(f_inv[n])
@@ -252,6 +252,10 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None):
     # # accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
     # plot_log_likelihood_per_symbol(log_likelihood[:n+1], len(ciphertext))
     # plt.show()
+
+    if debug:
+        print("final answer....")
+        print(plaintext[:100] + " ... " + plaintext[-100:])
 
     # print(plaintext)
     accuracy = 0
@@ -531,12 +535,12 @@ if __name__ == '__main__':
     # with open('data/ciphertext_short.txt', 'r') as file:
     # with open('data/ciphertext_meghan.txt', 'r') as file:
     # with open('data/ciphertext_patrick.txt', 'r') as file:
-    # with open('test_ciphertext.txt', 'r') as file:
+    with open('test_ciphertext_breakpoint.txt', 'r') as file:
     # with open('data/ciphertext.txt', 'r') as file:
     # with open('data/ciphertext_feynman.txt', 'r') as file:
-    with open('data/ciphertext_feynman_breakpoint.txt', 'r') as file:
+    # with open('data/ciphertext_feynman_breakpoint.txt', 'r') as file:
         ciphertext = file.read().rstrip('\n') # remove trailing \n
-    decoded = decode(ciphertext, has_breakpoint=True)
+    decoded = decode(ciphertext, has_breakpoint=True, debug=True)
     # decoded = decode(ciphertext, has_breakpoint=False)
 
     # crop_lengths = [100, 200, 300, 500, 1000, 2000, 5000]
