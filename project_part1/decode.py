@@ -4,6 +4,7 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 from encode import encode
 import operator
+import time
 
 CROP_LENGTH = 500
 
@@ -11,267 +12,316 @@ np.seterr(all='ignore')
 
 # @profile
 def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
-    n_to_stop = None
-    # print("********")
-    # print("** ciphertext: {}".format(ciphertext))
-    # print("********")
+    try:
+        n_to_stop = None
+        # print("********")
+        # print("** ciphertext: {}".format(ciphertext))
+        # print("********")
 
-    np.random.seed(seed=124)
-    N = int(1e4) # num_iterations
-    with open('data/alphabet.csv', 'rb') as f:
-        reader = csv.reader(f)
-        alphabet = list(reader)[0]
-    m = len(alphabet) # alphabet size
-    M = np.loadtxt(open("data/letter_transition_matrix.csv", "rb"), delimiter=",")
-    P = np.loadtxt(open("data/letter_probabilities.csv", "rb"), delimiter=",")
+        np.random.seed(seed=124)
+        N = int(1e4) # num_iterations
+        with open('data/alphabet.csv', 'rb') as f:
+            reader = csv.reader(f)
+            alphabet = list(reader)[0]
+        m = len(alphabet) # alphabet size
+        M = np.loadtxt(open("data/letter_transition_matrix.csv", "rb"), delimiter=",")
+        P = np.loadtxt(open("data/letter_probabilities.csv", "rb"), delimiter=",")
 
-    # if true_plaintext is None:
-    #     # with open('test_plaintext.txt', 'r') as file:
-    #     # with open('data/plaintext.txt', 'r') as file:
-    #     # with open('data/plaintext_patrick.txt', 'r') as file:
-    #     # with open('data/plaintext_meghan.txt', 'r') as file:
-    #     # with open('data/plaintext_short.txt', 'r') as file:
-    #     # with open('data/plaintext_warandpeace.txt', 'r') as file:
-    #     # with open('data/plaintext_feynman.txt', 'r') as file:
-    #     # with open('data/plaintext_paradiselost.txt', 'r') as file:
-    #         # true_plaintext = file.read().rstrip('\n')[:CROP_LENGTH] # remove trailing \n
-    #         true_plaintext = file.read().rstrip('\n') # remove trailing \n
+        # if true_plaintext is None:
+        #     # with open('test_plaintext.txt', 'r') as file:
+        #     # with open('data/plaintext.txt', 'r') as file:
+        #     # with open('data/plaintext_patrick.txt', 'r') as file:
+        #     # with open('data/plaintext_meghan.txt', 'r') as file:
+        #     # with open('data/plaintext_short.txt', 'r') as file:
+        #     # with open('data/plaintext_warandpeace.txt', 'r') as file:
+        #     # with open('data/plaintext_feynman.txt', 'r') as file:
+        #     # with open('data/plaintext_paradiselost.txt', 'r') as file:
+        #         # true_plaintext = file.read().rstrip('\n')[:CROP_LENGTH] # remove trailing \n
+        #         true_plaintext = file.read().rstrip('\n') # remove trailing \n
 
-    # # generic version
-    # letters_per_gram = 2
-    # english_ngram_dict = {}
-    # with open('data/ngrams{}.csv'.format(2), 'rb') as f:
-    #     reader = csv.reader(f)
-    #     next(reader) # skip first line
-    #     total_num_grams = float(sum(int(r[1]) for r in reader))
-    #     f.seek(0) # reset to start of csv to get normalized counts
-    #     next(reader)
-    #     english_ngram_dict = {row[0].lower() : np.log2(int(row[1])/total_num_grams) for row in reader}
+        # # generic version
+        # letters_per_gram = 2
+        # english_ngram_dict = {}
+        # with open('data/ngrams{}.csv'.format(2), 'rb') as f:
+        #     reader = csv.reader(f)
+        #     next(reader) # skip first line
+        #     total_num_grams = float(sum(int(r[1]) for r in reader))
+        #     f.seek(0) # reset to start of csv to get normalized counts
+        #     next(reader)
+        #     english_ngram_dict = {row[0].lower() : np.log2(int(row[1])/total_num_grams) for row in reader}
 
-    # provided M matrix version (only works for 2-grams!!)
-    letters_per_gram = 2
-    english_ngram_dict = {}
-    M_logl = np.log2(M/np.sum(M))
-    for i, letter1 in enumerate(alphabet):
-        for j, letter2 in enumerate(alphabet):
-            english_ngram_dict[letter1+letter2] = M_logl[j,i]
+        # provided M matrix version (only works for 2-grams!!)
+        letters_per_gram = 2
+        english_ngram_dict = {}
+        M_logl = np.log2(M/np.sum(M))
+        for i, letter1 in enumerate(alphabet):
+            for j, letter2 in enumerate(alphabet):
+                english_ngram_dict[letter1+letter2] = M_logl[j,i]
 
-    a = np.empty((N+1))
-    pyf = np.empty((N+1))
-    log_pyf = np.empty((N+1))
-    accept = np.empty((N+1), dtype=bool)
-    ciphertext_len = len(full_ciphertext)
-    log_l_new = np.empty((N+1))
-    log_l_old = np.empty((N+1))
-    log_likelihood = np.empty((N+1))
+        a = np.empty((N+1))
+        pyf = np.empty((N+1))
+        log_pyf = np.empty((N+1))
+        accept = np.empty((N+1), dtype=bool)
+        ciphertext_len = len(full_ciphertext)
+        log_l_new = np.empty((N+1))
+        log_l_old = np.empty((N+1))
+        log_likelihood = np.empty((N+1))
 
-    # initialize f
-    # f_inv[n]:    letter y: index in x -- {'a':6, 'b':27, ...}
-    f_inv = [{} for n in range(N+1)] 
-
-    if has_breakpoint:
-        breakpt = np.empty((N+1), dtype=int)
-        f_inv2 = [{} for n in range(N+1)]
-        early_ciphertext = full_ciphertext[:400]
-        late_ciphertext = full_ciphertext[-400:]
-        early_period_ind, early_space_ind, late_period_ind, late_space_ind, early_breakpt, late_breakpt = find_space_and_period_with_breakpoint(early_ciphertext, late_ciphertext, full_ciphertext, alphabet)
-        early_ciphertext = full_ciphertext[:early_breakpt]
-        late_ciphertext = full_ciphertext[late_breakpt:]
-        f_inv[0] = initialize_f_inv(early_ciphertext, alphabet, P)
-        f_inv2[0] = initialize_f_inv(late_ciphertext, alphabet, P)
-        f_inv[0] = set_letters_correctly([".", " "], [early_period_ind, early_space_ind], alphabet, f_inv[0])
-        f_inv2[0] = set_letters_correctly([".", " "], [late_period_ind, late_space_ind], alphabet, f_inv2[0])
-        breakpt[0] = (early_breakpt + late_breakpt) / 2
-        early_alphabet = deepcopy(alphabet)
-        early_alphabet.remove(alphabet[early_period_ind])
-        early_alphabet.remove(alphabet[early_space_ind])
-        late_alphabet = deepcopy(alphabet)
-        late_alphabet.remove(alphabet[late_period_ind])
-        late_alphabet.remove(alphabet[late_space_ind])
-
-        early_ciphertext_dict = ciphertext_to_dict(early_ciphertext, letters_per_gram=letters_per_gram)
-        late_ciphertext_dict = ciphertext_to_dict(late_ciphertext, letters_per_gram=letters_per_gram)
-
-    else:
-        period_ind, space_ind = find_space_and_period(full_ciphertext, alphabet)
-        f_inv[0] = initialize_f_inv(full_ciphertext, alphabet, P)
-        f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
-
-        full_ciphertext_dict = ciphertext_to_dict(full_ciphertext, letters_per_gram=letters_per_gram)
-
-    vowel_inds = [alphabet.index(vowel) for vowel in ['a','e','i','o','u']]
-
-    # print("Initial state:")
-    # print("f_inv[0]: {}".format(f_inv[0]))
-    # print("f_inv2[0]: {}".format(f_inv2[0]))
-
-    # print(decode_ciphertext(full_ciphertext[:200], f_inv[0], alphabet))
-    # if has_breakpoint:
-    #     print(decode_ciphertext(full_ciphertext[-200:], f_inv2[0], alphabet))
-
-    # print('-----')
-    # print('-----')
-
-    # Run the Markov Chain N steps so it converges to desired distribution
-    for n in range(1,N+1):
-        # print("-------")
-        # print("Step: {}".format(n))
-
-        f_inv[n] = deepcopy(f_inv[n-1])
-        if has_breakpoint:
-            f_inv2[n] = deepcopy(f_inv2[n-1])
-            breakpt[n] = deepcopy(breakpt[n-1])
-
-        # if n % 100 == 0:
-        #     # try swapping vowels
-        #     vowel_keys = []
-        #     for key in f_inv[n-1].keys():
-        #         if f_inv[n-1][key] in vowel_inds:
-        #             vowel_keys.append(key)
-        #     # i, j = np.random.choice(vowel_keys, 2, replace=False)
-        #     num_swaps = 1
-        #     swaps = np.random.choice(vowel_keys, 2*num_swaps, replace=False)
-        #     i, j = swaps
-        #     print("Random swap of: ({},{})".format(i,j))
-        #     print("we think those are: ({},{})".format(alphabet[f_inv[n-1][i]], alphabet[f_inv[n-1][j]]))
-        #     for swap in range(num_swaps):
-        #         i, j = swaps[2*swap:2+2*swap]
-        #         f_inv[n][i] = f_inv[n-1][j]
-        #         f_inv[n][j] = f_inv[n-1][i]
-        
+        # initialize f
+        # f_inv[n]:    letter y: index in x -- {'a':6, 'b':27, ...}
+        f_inv = [{} for n in range(N+1)] 
 
         if has_breakpoint:
-            if n % 2 == 0:
-                # print("proposed new 1st half")
-                mapping = f_inv
-                ciphertext = early_ciphertext
-                ciphertext_dict = early_ciphertext_dict
-                this_alphabet = early_alphabet
-            else:
-                # print("proposed new 2nd half")
-                mapping = f_inv2
-                ciphertext = late_ciphertext
-                ciphertext_dict = late_ciphertext_dict
-                this_alphabet = late_alphabet
-            num_swaps = 1
-            swaps = np.random.choice(this_alphabet, 2*num_swaps, replace=False)
-            for swap in range(num_swaps):
-                i, j = swaps[2*swap:2+2*swap]
-                mapping[n][i] = mapping[n-1][j]
-                mapping[n][j] = mapping[n-1][i]
+            breakpt = np.empty((N+1), dtype=int)
+            f_inv2 = [{} for n in range(N+1)]
+            breakpt_init = min(500, len(full_ciphertext)/2)
+            early_ciphertext = full_ciphertext[:breakpt_init]
+            late_ciphertext = full_ciphertext[-breakpt_init:]
+            early_period_ind, early_space_ind, late_period_ind, late_space_ind, early_breakpt, late_breakpt = find_space_and_period_with_breakpoint(early_ciphertext, late_ciphertext, full_ciphertext, alphabet)
+            early_ciphertext = full_ciphertext[:early_breakpt]
+            late_ciphertext = full_ciphertext[late_breakpt:]
+            f_inv[0] = initialize_f_inv(early_ciphertext, alphabet, P)
+            f_inv2[0] = initialize_f_inv(late_ciphertext, alphabet, P)
+            f_inv[0] = set_letters_correctly([".", " "], [early_period_ind, early_space_ind], alphabet, f_inv[0])
+            f_inv2[0] = set_letters_correctly([".", " "], [late_period_ind, late_space_ind], alphabet, f_inv2[0])
+            breakpt[0] = 0
+            early_alphabet = deepcopy(alphabet)
+            early_alphabet.remove(alphabet[early_period_ind])
+            early_alphabet.remove(alphabet[early_space_ind])
+            late_alphabet = deepcopy(alphabet)
+            late_alphabet.remove(alphabet[late_period_ind])
+            late_alphabet.remove(alphabet[late_space_ind])
+
+            early_ciphertext_dict = ciphertext_to_dict(early_ciphertext, letters_per_gram=letters_per_gram)
+            late_ciphertext_dict = ciphertext_to_dict(late_ciphertext, letters_per_gram=letters_per_gram)
+
         else:
-            # Sample two indices from the previous cipher mapping
-            # i, j = np.random.choice(alphabet, 2, replace=False)
-            num_swaps = 1
-            swaps = np.random.choice(alphabet, 2*num_swaps, replace=False)
-            for swap in range(num_swaps):
-                i, j = swaps[2*swap:2+2*swap]
-                f_inv[n][i] = f_inv[n-1][j]
-                f_inv[n][j] = f_inv[n-1][i]
-            # print("Random swap of: ({},{})".format(i,j))
+            period_ind, space_ind = find_space_and_period(full_ciphertext, alphabet)
+            f_inv[0] = initialize_f_inv(full_ciphertext, alphabet, P)
+            f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
 
+            full_ciphertext_dict = ciphertext_to_dict(full_ciphertext, letters_per_gram=letters_per_gram)
 
-        # propose new cipher mapping by swapping at those 2 sampled indices
-        # f_inv[n][i] = f_inv[n-1][j]
-        # f_inv[n][j] = f_inv[n-1][i]
-        
+        vowel_inds = [alphabet.index(vowel) for vowel in ['a','e','i','o','u']]
 
+        if debug:
+            print("Initial state:")
+        # print("f_inv[0]: {}".format(f_inv[0]))
+        # print("f_inv2[0]: {}".format(f_inv2[0]))
 
-        # if n % 100 == 0:
-        #     print(decode_ciphertext(ciphertext, f_inv[n-1], alphabet)[:500])
-        #     print('--')
-        #     print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:500])
-
-        # compute log_likelihoods of the ciphertext under the new and old mappings
-
-        if has_breakpoint:
-            log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood_dict(english_ngram_dict, mapping[n], mapping[n-1], ciphertext_dict, alphabet)
-        else:
-            # log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood(P, M, f_inv[n], f_inv[n-1], full_ciphertext, alphabet)
-            log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood_dict(english_ngram_dict, f_inv[n], f_inv[n-1], full_ciphertext_dict, alphabet)
-
-        if np.isinf(log_l_old[n]):
-            pyf[n] = 0.
-        else:
-            pyf[n] = np.power(2, log_pyf[n])
-
-        a[n] = np.min([1., pyf[n]])
-
-        # print("log_l_new[n]: {}".format(log_l_new[n]))
-        # print("log_l_old[n]: {}".format(log_l_old[n]))
-        # print("log_pyf[n]: {}".format(log_pyf[n]))
-        # print("pyf[n]: {}".format(pyf[n]))
-        # print("a[n]: {}".format(a[n]))
-
-        # sample from bernoulli whether to accept or reject new mapping
-        accept[n] = np.random.binomial(n=1, p=a[n])
-        # print("accept[n]: {}".format(accept[n]))
-
-        # if reject, copy old mapping to new mapping (reject new sample fn)
-        if accept[n] == False:
-            # print("reject")
+            print(decode_ciphertext(full_ciphertext[:200], f_inv[0], alphabet))
             if has_breakpoint:
-                mapping[n] = deepcopy(mapping[n-1])
-            else:
-                f_inv[n] = deepcopy(f_inv[n-1])
-            log_likelihood[n] = log_l_old[n] # reject new mapping, so use old mapping to compute log_likelihood
-        else:
-            # print("Accept!")
-            log_likelihood[n] = log_l_new[n] # accept the new mapping, so use it to compute log_likelihood
-            # if n_to_stop is None:
-            #     n_to_stop = n + 20
-        
-        if n == n_to_stop:
-            break
-        
-        ### Debug Msgs
-        if n % 10 == 0 and debug:
-            print("Step: {}".format(n))
-            # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
-            print("log_l_new[n]: {}".format(log_l_new[n]))
-            print("log_l_old[n]: {}".format(log_l_old[n]))
-            print("log_pyf[n]: {}".format(log_pyf[n]))
-            # print('--')
-            # print("previous: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n-1], alphabet)))
-            # print("proposed: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
-            print("{}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
-            # print('--')
-            if has_breakpoint:
-                # print("breakpoint: {}".format(breakpt[n]))
-                # print('--')
-                # print("previous: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n-1], alphabet)))
-                # print("proposed: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
-                print("{}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
+                print(decode_ciphertext(full_ciphertext[-200:], f_inv2[0], alphabet))
 
+        # print('-----')
+        # print('-----')
+
+        # Run the Markov Chain N steps so it converges to desired distribution
+        for n in range(1,N+1):
+            # print("-------")
+            # print("Step: {}".format(n))
+
+            f_inv[n] = deepcopy(f_inv[n-1])
+            if has_breakpoint:
+                f_inv2[n] = deepcopy(f_inv2[n-1])
+                breakpt[n] = deepcopy(breakpt[n-1])
+
+            # if n % 100 == 0:
+            #     # try swapping vowels
+            #     vowel_keys = []
+            #     for key in f_inv[n-1].keys():
+            #         if f_inv[n-1][key] in vowel_inds:
+            #             vowel_keys.append(key)
+            #     # i, j = np.random.choice(vowel_keys, 2, replace=False)
+            #     num_swaps = 1
+            #     swaps = np.random.choice(vowel_keys, 2*num_swaps, replace=False)
+            #     i, j = swaps
+            #     print("Random swap of: ({},{})".format(i,j))
+            #     print("we think those are: ({},{})".format(alphabet[f_inv[n-1][i]], alphabet[f_inv[n-1][j]]))
+            #     for swap in range(num_swaps):
+            #         i, j = swaps[2*swap:2+2*swap]
+            #         f_inv[n][i] = f_inv[n-1][j]
+            #         f_inv[n][j] = f_inv[n-1][i]
+            
+
+            if has_breakpoint:
+                if n % 2 == 0:
+                    # print("proposed new 1st half")
+                    mapping = f_inv
+                    ciphertext = early_ciphertext
+                    ciphertext_dict = early_ciphertext_dict
+                    this_alphabet = early_alphabet
+                else:
+                    # print("proposed new 2nd half")
+                    mapping = f_inv2
+                    ciphertext = late_ciphertext
+                    ciphertext_dict = late_ciphertext_dict
+                    this_alphabet = late_alphabet
+                num_swaps = 1
+                swaps = np.random.choice(this_alphabet, 2*num_swaps, replace=False)
+                for swap in range(num_swaps):
+                    i, j = swaps[2*swap:2+2*swap]
+                    mapping[n][i] = mapping[n-1][j]
+                    mapping[n][j] = mapping[n-1][i]
+            else:
+                # Sample two indices from the previous cipher mapping
+                # i, j = np.random.choice(alphabet, 2, replace=False)
+                num_swaps = 1
+                swaps = np.random.choice(alphabet, 2*num_swaps, replace=False)
+                for swap in range(num_swaps):
+                    i, j = swaps[2*swap:2+2*swap]
+                    f_inv[n][i] = f_inv[n-1][j]
+                    f_inv[n][j] = f_inv[n-1][i]
+                # print("Random swap of: ({},{})".format(i,j))
+
+
+            # update the breakpt, recompute the gram dicts in each ciphertext
+            if has_breakpoint and n % 100 == 0 and n > 0:
+                breakpt[n] = find_breakpoint(full_ciphertext, f_inv[n], f_inv2[n], english_ngram_dict, alphabet)
+                early_ciphertext = full_ciphertext[:breakpt[n]]
+                late_ciphertext = full_ciphertext[breakpt[n]:]
+                early_ciphertext_dict = ciphertext_to_dict(early_ciphertext, letters_per_gram=letters_per_gram)
+                late_ciphertext_dict = ciphertext_to_dict(late_ciphertext, letters_per_gram=letters_per_gram)
+
+            if has_breakpoint and n % 500 == 0 and n > 0:
+                early_plaintext = decode_ciphertext(early_ciphertext, f_inv[n], alphabet)
+                words = early_plaintext.split(' ')
+                word_length = [len(word) for word in words]
+                num_words = float(len(words))
+                avg_word_length = sum(word_length) / num_words
+                pct_long_words = sum(i > 20 for i in word_length) / num_words
+                # print("pct_long_words: {}".format(pct_long_words))
+                # print("avg_word_length: {}".format(avg_word_length))
+                if pct_long_words > 0.1 or avg_word_length > 7.:
+                    early_period_ind, early_space_ind, _, _, early_breakpt, _ = find_space_and_period_with_breakpoint(early_ciphertext, late_ciphertext, full_ciphertext, alphabet)
+                    f_inv[0] = set_letters_correctly([".", " "], [early_period_ind, early_space_ind], alphabet, f_inv[0])
+                    early_alphabet = deepcopy(alphabet)
+                    early_alphabet.remove(alphabet[early_period_ind])
+                    early_alphabet.remove(alphabet[early_space_ind])
+                    # print('--------- had to re-compute spaces (early) -------')
+                    # time.sleep(1)
+
+                late_plaintext = decode_ciphertext(late_ciphertext, f_inv2[n], alphabet)
+                words = late_plaintext.split(' ')
+                word_length = [len(word) for word in words]
+                num_words = float(len(words))
+                avg_word_length = sum(word_length) / num_words
+                pct_long_words = sum(i > 20 for i in word_length) / num_words
+                # print("pct_long_words: {}".format(pct_long_words))
+                # print("avg_word_length: {}".format(avg_word_length))
+                if pct_long_words > 0.1 or avg_word_length > 7.:
+                    _, _, late_period_ind, late_space_ind, _, late_breakpt = find_space_and_period_with_breakpoint(early_ciphertext, late_ciphertext, full_ciphertext, alphabet)
+                    f_inv2[0] = set_letters_correctly([".", " "], [late_period_ind, late_space_ind], alphabet, f_inv2[0])
+                    late_alphabet = deepcopy(alphabet)
+                    late_alphabet.remove(alphabet[late_period_ind])
+                    late_alphabet.remove(alphabet[late_space_ind])
+                    # print('--------- had to re-compute spaces (late) -------')
+                    # time.sleep(1)
+
+            # propose new cipher mapping by swapping at those 2 sampled indices
+            # f_inv[n][i] = f_inv[n-1][j]
+            # f_inv[n][j] = f_inv[n-1][i]
+            
+
+
+            # if n % 100 == 0:
+            #     print(decode_ciphertext(ciphertext, f_inv[n-1], alphabet)[:500])
+            #     print('--')
+            #     print(decode_ciphertext(ciphertext, f_inv[n], alphabet)[:500])
+
+            # compute log_likelihoods of the ciphertext under the new and old mappings
+
+            if has_breakpoint:
+                log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood_dict(english_ngram_dict, mapping[n], mapping[n-1], ciphertext_dict, alphabet)
+            else:
+                log_pyf[n], log_l_new[n], log_l_old[n] = compute_likelihood_dict(english_ngram_dict, f_inv[n], f_inv[n-1], full_ciphertext_dict, alphabet)
+
+            if np.isinf(log_l_old[n]):
+                pyf[n] = 0.
+            else:
+                pyf[n] = np.power(2, log_pyf[n])
+
+
+            a[n] = np.min([1., pyf[n]])
+
+            # print("log_l_new[n]: {}".format(log_l_new[n]))
+            # print("log_l_old[n]: {}".format(log_l_old[n]))
+            # print("log_pyf[n]: {}".format(log_pyf[n]))
+            # print("pyf[n]: {}".format(pyf[n]))
+            # print("a[n]: {}".format(a[n]))
+
+            # sample from bernoulli whether to accept or reject new mapping
+            accept[n] = np.random.binomial(n=1, p=a[n])
             # print("accept[n]: {}".format(accept[n]))
-            # if accept[n]:
-            #     assert(0)
-            print("-----")
 
-    # after MCMC has converged to proper distribution, use it to decode
-    if has_breakpoint:
-        breakpt[n] = find_breakpoint(full_ciphertext, f_inv[n], f_inv2[n], english_ngram_dict, alphabet)
-        plaintext = decode_ciphertext(full_ciphertext[:breakpt[n]], f_inv[n], alphabet) + decode_ciphertext(full_ciphertext[breakpt[n]:], f_inv2[n], alphabet)
-    else:
-        plaintext = decode_ciphertext(full_ciphertext, f_inv[n], alphabet)
-    # f[n] = finv_to_f(f_inv[n])
+            # if reject, copy old mapping to new mapping (reject new sample fn)
+            if accept[n] == False:
+                # print("reject")
+                if has_breakpoint:
+                    mapping[n] = deepcopy(mapping[n-1])
+                else:
+                    f_inv[n] = deepcopy(f_inv[n-1])
+                log_likelihood[n] = log_l_old[n] # reject new mapping, so use old mapping to compute log_likelihood
+            else:
+                # print("Accept!")
+                log_likelihood[n] = log_l_new[n] # accept the new mapping, so use it to compute log_likelihood
+                # if n_to_stop is None:
+                #     n_to_stop = n + 20
+            
+            if n == n_to_stop:
+                break
+            
+            ### Debug Msgs
+            if n % 2 == 0 and debug:
+            # if n % 10 == 0 and debug:
+                print("Step: {}".format(n))
+                # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
+                print("log_l_new[n]: {}".format(log_l_new[n]))
+                print("log_l_old[n]: {}".format(log_l_old[n]))
+                print("log_pyf[n]: {}".format(log_pyf[n]))
+                # print('--')
+                print("previous: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n-1], alphabet)))
+                print("proposed: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
+                # print("{}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
+                # print('--')
+                # if has_breakpoint:
+                #     # print("breakpoint: {}".format(breakpt[n]))
+                #     # print(len(early_ciphertext), len(late_ciphertext))
+                #     # print('--')
+                #     # print("previous: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n-1], alphabet)))
+                #     # print("proposed: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
+                #     print("{}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
 
-    # plot_log_likelihood(log_likelihood[:n+1])
-    # plot_acceptance_rate(accept[:n+1], T=20)
-    # # accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
-    # plot_log_likelihood_per_symbol(log_likelihood[:n+1], len(ciphertext))
-    # plt.show()
+                print("accept[n]: {}".format(accept[n]))
+                print("-----")
+                # time.sleep(0.1)
 
-    if debug:
-        print("final answer....")
-        print(plaintext[:100] + " ... " + plaintext[-100:])
+        # after MCMC has converged to proper distribution, use it to decode
         if has_breakpoint:
-            print("breakpt: {}".format(breakpt[n]))
+            breakpt[n] = find_breakpoint(full_ciphertext, f_inv[n], f_inv2[n], english_ngram_dict, alphabet)
+            plaintext = decode_ciphertext(full_ciphertext[:breakpt[n]], f_inv[n], alphabet) + decode_ciphertext(full_ciphertext[breakpt[n]:], f_inv2[n], alphabet)
+        else:
+            plaintext = decode_ciphertext(full_ciphertext, f_inv[n], alphabet)
+        # f[n] = finv_to_f(f_inv[n])
 
-    # print(plaintext)
-    accuracy = 0
-    # return plaintext, accuracy
-    return plaintext
+        # plot_log_likelihood(log_likelihood[:n+1])
+        # plot_acceptance_rate(accept[:n+1], T=20)
+        # # accuracy = plot_accuracy(true_plaintext, ciphertext, f_inv[:n+1], alphabet)
+        # plot_log_likelihood_per_symbol(log_likelihood[:n+1], len(ciphertext))
+        # plt.show()
+
+        if debug:
+            print("final answer....")
+            print(plaintext[:100] + " ... " + plaintext[-100:])
+            if has_breakpoint:
+                print("breakpt: {}".format(breakpt[n]))
+
+        # print(plaintext)
+        accuracy = 0
+        # return plaintext, accuracy
+        return plaintext
+    except:
+        return ciphertext
 
 def find_breakpoint(full_ciphertext, f_inv, f_inv2, english_gram_counts, alphabet):
     early_logl = np.ones((len(full_ciphertext)-1))
@@ -284,20 +334,10 @@ def find_breakpoint(full_ciphertext, f_inv, f_inv2, english_gram_counts, alphabe
         decoded_gram_logl2 = max(english_gram_counts[decoded_gram2], -50)
         early_logl[k] = decoded_gram_logl
         late_logl[k] = decoded_gram_logl2
-    # print("early_logl: {}".format(early_logl))
-    # print("late_logl: {}".format(late_logl))
 
     early_logl_cumsum = np.cumsum(early_logl)
     late_logl_cumsum = np.cumsum(late_logl[::-1])[::-1]
     total_logl_cumsum = early_logl_cumsum + late_logl_cumsum
-
-    # plt.figure('cumsum')
-    # plt.plot(range(len(total_logl_cumsum)), total_logl_cumsum)
-    # plt.show()
-
-    # print("early_logl_cumsum: {}".format(early_logl_cumsum))
-    # print("late_logl_cumsum: {}".format(late_logl_cumsum))
-    # print("total_logl_cumsum: {}".format(total_logl_cumsum))
 
     breakpt = total_logl_cumsum.argmax() + 2
 
@@ -456,15 +496,6 @@ def find_space_and_period(ciphertext, alphabet):
     # print("pos_and_zero_inds: {}".format(pos_and_zero_inds))
     # print("pos_and_zero_mat: {}".format(pos_and_zero_mat))
     try:
-
-        # _, period_ind_, _ = np.unravel_index(pos_and_zero_mat.argmax(), pos_and_zero_mat.shape)
-        # period_ind = pos_and_zero_inds[0][period_ind_]
-        # space_ind = mat[period_ind].argmax()
-        # print("old method...")
-        # print("period_ind_: {}".format(period_ind_))
-        # print("period_ind: {}".format(period_ind))
-        # print("space_ind: {}".format(space_ind))
-        
         space_inds = np.argmax(mat[pos_and_zero_inds], axis=1)
         space_ind_ = np.sum(mat[:,space_inds], axis=0).argmax()
         space_ind = space_inds[space_ind_]
@@ -472,7 +503,6 @@ def find_space_and_period(ciphertext, alphabet):
         # print("new method...")
         # print("period_ind: {}".format(period_ind))
         # print("space_ind: {}".format(space_ind))
-
         
     except:
         period_ind = 0; space_ind = 1
@@ -550,10 +580,15 @@ def test_likelihood():
     compute_likelihood3(P,M,"test.ametter", "test. letter")
 
 if __name__ == '__main__':
+    ciphertext_filename = 'test_ciphertext_breakpoint.txt'
+    # ciphertext_filename = 'data/ciphertext_feynman_breakpoint.txt'
     # ciphertext_filename = 'data/ciphertext_warandpeace_breakpoint.txt'
     # ciphertext_filename = 'data/ciphertext_warandpeace.txt'
-    ciphertext_filename = 'data/ciphertext_paradiselost_breakpoint.txt'
+    # ciphertext_filename = 'data/ciphertext_paradiselost_breakpoint.txt'
     # ciphertext_filename = 'data/ciphertext_paradiselost.txt'
+    # ciphertext_filename = 'data/ciphertext_patrick.txt'
+    # ciphertext_filename = 'data/ciphertext_short.txt'
+
 
     # with open('data/ciphertext_warandpeace.txt', 'r') as file:
     # with open('data/ciphertext_paradiselost.txt', 'r') as file:
