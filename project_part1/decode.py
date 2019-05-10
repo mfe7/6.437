@@ -18,8 +18,8 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
         # print("** ciphertext: {}".format(ciphertext))
         # print("********")
 
-        np.random.seed(seed=124)
-        N = int(1e4) # num_iterations
+        np.random.seed(seed=123)
+        N = int(2e4) # num_iterations
         with open('data/alphabet.csv', 'rb') as f:
             reader = csv.reader(f)
             alphabet = list(reader)[0]
@@ -80,10 +80,12 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
             early_period_ind, early_space_ind, late_period_ind, late_space_ind, early_breakpt, late_breakpt = find_space_and_period_with_breakpoint(early_ciphertext, late_ciphertext, full_ciphertext, alphabet)
             early_ciphertext = full_ciphertext[:early_breakpt]
             late_ciphertext = full_ciphertext[late_breakpt:]
-            f_inv[0] = initialize_f_inv(early_ciphertext, alphabet, P)
-            f_inv2[0] = initialize_f_inv(late_ciphertext, alphabet, P)
-            f_inv[0] = set_letters_correctly([".", " "], [early_period_ind, early_space_ind], alphabet, f_inv[0])
-            f_inv2[0] = set_letters_correctly([".", " "], [late_period_ind, late_space_ind], alphabet, f_inv2[0])
+            f_inv[0] = initialize_f_inv2(early_ciphertext, alphabet, early_space_ind, early_period_ind)
+            f_inv2[0] = initialize_f_inv2(late_ciphertext, alphabet, late_space_ind, late_period_ind)
+            # f_inv[0] = initialize_f_inv(early_ciphertext, alphabet, P)
+            # f_inv2[0] = initialize_f_inv(late_ciphertext, alphabet, P)
+            # f_inv[0] = set_letters_correctly([".", " "], [early_period_ind, early_space_ind], alphabet, f_inv[0])
+            # f_inv2[0] = set_letters_correctly([".", " "], [late_period_ind, late_space_ind], alphabet, f_inv2[0])
             breakpt[0] = 0
             early_alphabet = deepcopy(alphabet)
             early_alphabet.remove(alphabet[early_period_ind])
@@ -97,8 +99,9 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
 
         else:
             period_ind, space_ind = find_space_and_period(full_ciphertext, alphabet)
-            f_inv[0] = initialize_f_inv(full_ciphertext, alphabet, P)
-            f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
+            f_inv[0] = initialize_f_inv2(full_ciphertext, alphabet, space_ind, period_ind)
+            # f_inv[0] = initialize_f_inv(full_ciphertext, alphabet, P)
+            # f_inv[0] = set_letters_correctly([".", " "], [period_ind, space_ind], alphabet, f_inv[0])
 
             full_ciphertext_dict = ciphertext_to_dict(full_ciphertext, letters_per_gram=letters_per_gram)
 
@@ -112,6 +115,7 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
             print(decode_ciphertext(full_ciphertext[:200], f_inv[0], alphabet))
             if has_breakpoint:
                 print(decode_ciphertext(full_ciphertext[-200:], f_inv2[0], alphabet))
+            # assert(0)
 
         # print('-----')
         # print('-----')
@@ -272,25 +276,25 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
                 break
             
             ### Debug Msgs
-            if n % 2 == 0 and debug:
-            # if n % 10 == 0 and debug:
+            # if n % 2 == 0 and debug:
+            if n % 10 == 0 and debug:
                 print("Step: {}".format(n))
                 # print("Acc: {}".format(compute_accuracy(true_plaintext, ciphertext, f_inv[n], alphabet)))
                 print("log_l_new[n]: {}".format(log_l_new[n]))
                 print("log_l_old[n]: {}".format(log_l_old[n]))
                 print("log_pyf[n]: {}".format(log_pyf[n]))
                 # print('--')
-                print("previous: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n-1], alphabet)))
-                print("proposed: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
-                # print("{}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
+                # print("previous: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n-1], alphabet)))
+                # print("proposed: {}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
+                print("{}".format(decode_ciphertext(full_ciphertext[:200], f_inv[n], alphabet)))
                 # print('--')
-                # if has_breakpoint:
+                if has_breakpoint:
                 #     # print("breakpoint: {}".format(breakpt[n]))
                 #     # print(len(early_ciphertext), len(late_ciphertext))
                 #     # print('--')
                 #     # print("previous: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n-1], alphabet)))
                 #     # print("proposed: {}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
-                #     print("{}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
+                    print("{}".format(decode_ciphertext(full_ciphertext[-200:], f_inv2[n], alphabet)))
 
                 print("accept[n]: {}".format(accept[n]))
                 print("-----")
@@ -320,8 +324,10 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
         accuracy = 0
         # return plaintext, accuracy
         return plaintext
-    except:
-        return ciphertext
+    except Exception as e:
+        if debug:
+            print(e)
+        return full_ciphertext
 
 def find_breakpoint(full_ciphertext, f_inv, f_inv2, english_gram_counts, alphabet):
     early_logl = np.ones((len(full_ciphertext)-1))
@@ -417,6 +423,33 @@ def initialize_f_inv(ciphertext, alphabet, P):
     for i in range(len(p_letters)):
         f_inv[letters[i]] = alphabet.index(p_letters[i])
     return f_inv
+
+def initialize_f_inv2(ciphertext, alphabet, space_ind, period_ind):
+    mat = np.zeros((len(alphabet), len(alphabet)))
+    for k in range(1, len(ciphertext)):
+        mat[alphabet.index(ciphertext[k-1]), alphabet.index(ciphertext[k])] += 1
+    mat_rows = np.delete(np.arange(len(alphabet)), (period_ind, space_ind))
+    mat_no_space_or_period = np.delete(mat, (space_ind, period_ind), axis=0)
+    mat_no_space_or_period = np.delete(mat_no_space_or_period, (space_ind, period_ind), axis=1)
+    t_ind_, h_ind_ = np.unravel_index(np.argmax(mat_no_space_or_period, axis=None), mat_no_space_or_period.shape)
+    e_ind_ = np.argmax(mat_no_space_or_period[h_ind_,:])
+    t_ind = mat_rows[t_ind_]
+    h_ind = mat_rows[h_ind_]
+    e_ind = mat_rows[e_ind_]
+
+    # print("{} is space, {} is period.".format(alphabet[space_ind], alphabet[period_ind]))
+
+    available_inds = range(len(alphabet))
+    # f_inv = {alphabet[period_ind]: alphabet.index('.'), alphabet[space_ind]: alphabet.index(' ')}
+    f_inv = {alphabet[period_ind]: alphabet.index('.'), alphabet[space_ind]: alphabet.index(' '), alphabet[t_ind]: alphabet.index('t'), alphabet[h_ind]: alphabet.index('h'), alphabet[e_ind]: alphabet.index('e')}
+    for ind in f_inv.values():
+    # for ind in [period_ind, space_ind]:
+        available_inds.remove(ind)
+    for letter in alphabet:
+        if letter not in f_inv:
+            f_inv[letter] = available_inds.pop()
+    return f_inv
+
 
 def find_space_and_period_with_breakpoint(early_ciphertext, late_ciphertext, full_ciphertext, alphabet):
     for ciphertext in [early_ciphertext, late_ciphertext]:
@@ -580,13 +613,15 @@ def test_likelihood():
     compute_likelihood3(P,M,"test.ametter", "test. letter")
 
 if __name__ == '__main__':
-    ciphertext_filename = 'test_ciphertext_breakpoint.txt'
-    # ciphertext_filename = 'data/ciphertext_feynman_breakpoint.txt'
+    # ciphertext_filename = 'test_ciphertext.txt'
+    # ciphertext_filename = 'test_ciphertext_breakpoint.txt'
+    ciphertext_filename = 'data/ciphertext_feynman_breakpoint.txt'
     # ciphertext_filename = 'data/ciphertext_warandpeace_breakpoint.txt'
     # ciphertext_filename = 'data/ciphertext_warandpeace.txt'
     # ciphertext_filename = 'data/ciphertext_paradiselost_breakpoint.txt'
     # ciphertext_filename = 'data/ciphertext_paradiselost.txt'
     # ciphertext_filename = 'data/ciphertext_patrick.txt'
+    # ciphertext_filename = 'data/ciphertext_meghan.txt'
     # ciphertext_filename = 'data/ciphertext_short.txt'
 
 
