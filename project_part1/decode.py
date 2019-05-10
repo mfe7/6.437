@@ -302,7 +302,7 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
 
         # after MCMC has converged to proper distribution, use it to decode
         if has_breakpoint:
-            breakpt[n] = find_breakpoint(full_ciphertext, f_inv[n], f_inv2[n], english_ngram_dict, alphabet, plot=True)
+            breakpt[n] = find_breakpoint(full_ciphertext, f_inv[n], f_inv2[n], english_ngram_dict, alphabet, plot=debug)
             plaintext = decode_ciphertext(full_ciphertext[:breakpt[n]], f_inv[n], alphabet) + decode_ciphertext(full_ciphertext[breakpt[n]:], f_inv2[n], alphabet)
         else:
             plaintext = decode_ciphertext(full_ciphertext, f_inv[n], alphabet)
