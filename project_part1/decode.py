@@ -302,7 +302,7 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
 
         # after MCMC has converged to proper distribution, use it to decode
         if has_breakpoint:
-            breakpt[n] = find_breakpoint(full_ciphertext, f_inv[n], f_inv2[n], english_ngram_dict, alphabet)
+            breakpt[n] = find_breakpoint(full_ciphertext, f_inv[n], f_inv2[n], english_ngram_dict, alphabet, plot=True)
             plaintext = decode_ciphertext(full_ciphertext[:breakpt[n]], f_inv[n], alphabet) + decode_ciphertext(full_ciphertext[breakpt[n]:], f_inv2[n], alphabet)
         else:
             plaintext = decode_ciphertext(full_ciphertext, f_inv[n], alphabet)
@@ -329,7 +329,7 @@ def decode(full_ciphertext, has_breakpoint, true_plaintext=None, debug=False):
             print(e)
         return full_ciphertext
 
-def find_breakpoint(full_ciphertext, f_inv, f_inv2, english_gram_counts, alphabet):
+def find_breakpoint(full_ciphertext, f_inv, f_inv2, english_gram_counts, alphabet, plot=False):
     early_logl = np.ones((len(full_ciphertext)-1))
     late_logl = np.ones((len(full_ciphertext)-1))
     for k in range(len(full_ciphertext)-1):
@@ -344,6 +344,18 @@ def find_breakpoint(full_ciphertext, f_inv, f_inv2, english_gram_counts, alphabe
     early_logl_cumsum = np.cumsum(early_logl)
     late_logl_cumsum = np.cumsum(late_logl[::-1])[::-1]
     total_logl_cumsum = early_logl_cumsum + late_logl_cumsum
+
+    if plot:
+        ks = range(len(early_logl_cumsum))
+        plt.figure("cumsum")
+        plt.plot(ks, early_logl_cumsum, label="Early cipher function")
+        plt.plot(ks, late_logl_cumsum, label="Late cipher function")
+        plt.plot(ks, total_logl_cumsum, label="Sum")
+        plt.xlabel('Ciphertext character number')
+        plt.ylabel('Cumulative log likelihood')
+        plt.legend(loc='lower right')
+        plt.tight_layout()
+        plt.show()
 
     breakpt = total_logl_cumsum.argmax() + 2
 
